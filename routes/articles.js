@@ -82,11 +82,11 @@ router.get('/', async (req, res) => {
                 }
 
                 // 更新 marker 以获取下一页
-                marker = data.NextMarker || '';
+                marker = data.IsTruncated ? data.NextMarker : ''; // 如果是分块的，更新 marker
             } else {
                 break; // 如果没有内容，退出循环
             }
-        } while (data.IsTruncated); // 如果有更多对象，继续获取
+        } while (marker); // 如果有更多对象，继续获取
 
         res.json({
             code: 1,
