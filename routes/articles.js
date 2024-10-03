@@ -82,7 +82,7 @@ router.get('/', async (req, res) => {
     } catch (err) {
         res.status(500).json({
             code: 0,
-            msg: '获取文章失败',
+            msg: '获取文章失败：'+ cos,
             error: err.message,
         });
     }
