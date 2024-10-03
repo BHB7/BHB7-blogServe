@@ -1,6 +1,6 @@
 // routes/article.js
 const express = require('express');
-const { uploadJsonToCOS, getJsonFromCOS } = require('../models/index'); // 引入上传和获取函数
+const { uploadJsonToCOS, getJsonFromCOS, cos } = require('../models/index'); // 引入上传和获取函数
 const router = express.Router();
 
 /**
