@@ -72,6 +72,11 @@ router.get('/', async (req, res) => {
                 });
             });
 
+            // 检查是否获取到数据
+            if (!data || !data.Contents) {
+                throw new Error('未获取到有效的文章数据');
+            }
+
             // 处理获取到的文件
             for (const item of data.Contents) {
                 const articleData = await getJsonFromCOS(item.Key);
