@@ -56,6 +56,7 @@ router.get('/', async (req, res) => {
         let marker = ''; // 用于分页
 
         do {
+            // 使用 Promise 包装 cos.getBucket 以便使用 await
             const data = await new Promise((resolve, reject) => {
                 cos.getBucket({
                     Bucket: process.env.Bucket,
@@ -72,19 +73,19 @@ router.get('/', async (req, res) => {
                 });
             });
 
-            // 检查是否获取到数据
-            if (!data || !data.Contents) {
-                throw new Error('未获取到有效的文章数据');
-            }
+            // 检查获取的数据是否有效
+            if (data && data.Contents) {
+                // 处理获取到的文件
+                for (const item of data.Contents) {
+                    const articleData = await getJsonFromCOS(item.Key);
+                    allArticles.push(articleData);
+                }
 
-            // 处理获取到的文件
-            for (const item of data.Contents) {
-                const articleData = await getJsonFromCOS(item.Key);
-                allArticles.push(articleData);
+                // 更新 marker 以获取下一页
+                marker = data.NextMarker || '';
+            } else {
+                break; // 如果没有内容，退出循环
             }
-
-            // 更新 marker 以获取下一页
-            marker = data.NextMarker || '';
         } while (data.IsTruncated); // 如果有更多对象，继续获取
 
         res.json({
