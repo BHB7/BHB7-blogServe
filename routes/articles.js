@@ -1,14 +1,8 @@
 // routes/article.js
 const express = require('express');
-const { uploadJsonToCOS, getJsonFromCOS } = require('../models/index'); // 引入上传和获取函数
+const { uploadJsonToCOS, getJsonFromCOS, cos } = require('../models/index'); // 引入上传和获取函数
 const router = express.Router();
-const COS = require('cos-nodejs-sdk-v5');
 
-// 初始化COS实例
-const cos = new COS({
-    SecretId: process.env.SecretId,
-    SecretKey: process.env.SecretKey,
-});
 /**
  * 创建文章
  */
@@ -38,7 +32,7 @@ router.post('/', async (req, res) => {
     };
 
     try {
-        await uploadArticle(key, article);
+        await uploadJsonToCOS(key, article);
         res.status(201).json({
             code: 1,
             msg: '文章创建成功',
@@ -58,24 +52,40 @@ router.post('/', async (req, res) => {
  */
 router.get('/', async (req, res) => {
     try {
-        // 获取所有文章的文件列表
-        const { data } = await cos.listObjects({
-            Bucket: process.env.Bucket,
-            Region: process.env.Region,
-        });
+        const allArticles = [];
+        let marker = ''; // 用于分页
 
-        const articles = [];
+        do {
+            const data = await new Promise((resolve, reject) => {
+                cos.getBucket({
+                    Bucket: process.env.Bucket,
+                    Region: process.env.Region,
+                    Prefix: 'articles/', // 列出以 'articles/' 开头的对象
+                    Marker: marker,
+                    MaxKeys: 1000, // 每次获取的最大对象数
+                }, (err, data) => {
+                    if (err) {
+                        reject(err);
+                    } else {
+                        resolve(data);
+                    }
+                });
+            });
 
-        // 获取每篇文章的内容
-        for (const item of data.Contents) {
-            const articleData = await getJsonFromCOS(item.Key);
-            articles.push(articleData);
-        }
+            // 处理获取到的文件
+            for (const item of data.Contents) {
+                const articleData = await getJsonFromCOS(item.Key);
+                allArticles.push(articleData);
+            }
+
+            // 更新 marker 以获取下一页
+            marker = data.NextMarker || '';
+        } while (data.IsTruncated); // 如果有更多对象，继续获取
 
         res.json({
             code: 1,
             msg: '获取文章成功',
-            data: articles,
+            data: allArticles,
         });
     } catch (err) {
         res.status(500).json({
