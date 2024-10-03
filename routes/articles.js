@@ -1,8 +1,14 @@
 // routes/article.js
 const express = require('express');
-const { uploadJsonToCOS, getJsonFromCOS, cos } = require('../models/index'); // 引入上传和获取函数
+const { uploadJsonToCOS, getJsonFromCOS } = require('../models/index'); // 引入上传和获取函数
 const router = express.Router();
+const COS = require('cos-nodejs-sdk-v5');
 
+// 初始化COS实例
+const cos = new COS({
+    SecretId: process.env.SecretId,
+    SecretKey: process.env.SecretKey,
+});
 /**
  * 创建文章
  */
@@ -53,23 +59,15 @@ router.post('/', async (req, res) => {
 router.get('/', async (req, res) => {
     try {
         // 获取所有文章的文件列表
-        const { Contents } = await new Promise((resolve, reject) => {
-            cos.listObjects({
-                Bucket: process.env.Bucket,
-                Region: process.env.Region,
-            }, (err, data) => {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve(data);
-                }
-            });
+        const { data } = await cos.listObjects({
+            Bucket: process.env.Bucket,
+            Region: process.env.Region,
         });
 
         const articles = [];
 
         // 获取每篇文章的内容
-        for (const item of Contents) {
+        for (const item of data.Contents) {
             const articleData = await getJsonFromCOS(item.Key);
             articles.push(articleData);
         }
@@ -82,12 +80,11 @@ router.get('/', async (req, res) => {
     } catch (err) {
         res.status(500).json({
             code: 0,
-            msg: '获取文章失败：'+ cos,
+            msg: '获取文章失败',
             error: err.message,
         });
     }
 });
-
 
 /**
  * 根据标题获取单篇文章
