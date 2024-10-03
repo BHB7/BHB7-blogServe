@@ -1,6 +1,4 @@
 const COS = require('cos-nodejs-sdk-v5');
-const fs = require('fs');
-const path = require('path');
 
 // 初始化COS实例
 const cos = new COS({
@@ -19,14 +17,22 @@ const REGION = process.env.Region; // 区域
  */
 const uploadJsonToCOS = async (key, data) => {
     const jsonString = JSON.stringify(data);
-    await cos.putObject({
-        Bucket: BUCKET,
-        Region: REGION,
-        Key: key,
-        Body: jsonString,
-        ContentType: 'application/json',
+    return new Promise((resolve, reject) => {
+        cos.putObject({
+            Bucket: BUCKET,
+            Region: REGION,
+            Key: key,
+            Body: jsonString,
+            ContentType: 'application/json',
+        }, (err) => {
+            if (err) {
+                reject(err);
+            } else {
+                console.log(`Uploaded ${key} to COS`);
+                resolve();
+            }
+        });
     });
-    console.log(`Uploaded ${key} to COS`);
 };
 
 /**
@@ -52,19 +58,28 @@ const getJsonFromCOS = async (key) => {
 };
 
 /**
- * 示例: 上传一篇文章
+ * 上传一篇文章
  */
 const uploadArticle = async (article) => {
-    const key = `articles/${article.title}.json`; // 文件名，可以根据需求修改
-    await uploadJsonToCOS(key, article);
+    const key = `articles/${article.title}.json`; // 文件名
+    try {
+        await uploadJsonToCOS(key, article);
+    } catch (error) {
+        console.error(`Failed to upload article: ${error.message}`);
+    }
 };
 
 /**
- * 示例: 获取文章
+ * 获取文章
  */
 const fetchArticle = async (title) => {
     const key = `articles/${title}.json`; // 文件名
-    return await getJsonFromCOS(key);
+    try {
+        const article = await getJsonFromCOS(key);
+        return article;
+    } catch (error) {
+        console.error(`Failed to fetch article: ${error.message}`);
+    }
 };
 
 // 使用示例
@@ -73,11 +88,14 @@ const sampleArticle = {
     content: '或许路很漫长，或许路很艰难，但我依然坚持到底，加油',
     author: 'username',
     imgUrl: 'http://example.com/image.jpg',
-    tag: 'Vue',
+    tags: ['Vue'], // 修正为数组
 };
 
-// 上传示例文章
-uploadArticle(sampleArticle).catch(console.error);
-
-// 获取示例文章
-fetchArticle('学习Vue').then(data => console.log(data)).catch(console.error);
+// 导出 uploadArticle 和 fetchArticle
+module.exports = {
+    uploadJsonToCOS,
+    uploadArticle,
+    getJsonFromCOS,
+    fetchArticle,
+    cos,
+};

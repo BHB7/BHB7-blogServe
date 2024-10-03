@@ -32,7 +32,7 @@ router.post('/', async (req, res) => {
     };
 
     try {
-        await uploadJsonToCOS(key, article);
+        await uploadArticle(key, article);
         res.status(201).json({
             code: 1,
             msg: '文章创建成功',
