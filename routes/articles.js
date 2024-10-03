@@ -53,15 +53,23 @@ router.post('/', async (req, res) => {
 router.get('/', async (req, res) => {
     try {
         // 获取所有文章的文件列表
-        const { data } = await cos.listObjects({
-            Bucket: process.env.Bucket,
-            Region: process.env.Region,
+        const { Contents } = await new Promise((resolve, reject) => {
+            cos.listObjects({
+                Bucket: process.env.Bucket,
+                Region: process.env.Region,
+            }, (err, data) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(data);
+                }
+            });
         });
 
         const articles = [];
 
         // 获取每篇文章的内容
-        for (const item of data.Contents) {
+        for (const item of Contents) {
             const articleData = await getJsonFromCOS(item.Key);
             articles.push(articleData);
         }
@@ -79,6 +87,7 @@ router.get('/', async (req, res) => {
         });
     }
 });
+
 
 /**
  * 根据标题获取单篇文章
