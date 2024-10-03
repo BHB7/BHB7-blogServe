@@ -1,190 +1,159 @@
-const express = require('express')
-const router = express.Router()
-const { Article } = require('../models/index')
-/**
- * 发布文章
- */
-router.post('/', (req, res) => {
-    console.log(req.body);
-    // console.log(req.auth.uid);
-    Article.create({
-        ...req.body,
-        author: req.uid
-    }).then(r => {
-        res.json({
-            code: 1,
-            msg: '发布文章成功',
-            data: r
-        })
-    }).catch(err => {
-        res.json({
-            code: 0,
-            msg: '发布文章失败',
-            err: err
-        })
-
-    })
-})
+// routes/article.js
+const express = require('express');
+const { uploadJsonToCOS, getJsonFromCOS } = require('../models/index'); // 引入上传和获取函数
+const router = express.Router();
 
 /**
- * 获取全部文章
+ * 创建文章
  */
-router.get('/', (req, res) => {
-    const { manner } = req.query;
-    let query = {};
+router.post('/', async (req, res) => {
+    const { title, content, author, imgUrl, tags } = req.body;
+    const key = `articles/${title}.json`; // 使用标题作为文件名
 
-    if (manner === 'hot') {
-        // 查询views字段高低的最热文章，并进行降序排列
-        query = { views: { $gt: 0 } }; // 假设views大于0表示文章是热门的
-    } else if (manner === 'new') {
-        // 设置最新文章的查询条件
-        query = { updatedAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } };
-    } else {
-        return res.json({
+    // 检查文章是否已存在
+    try {
+        await getJsonFromCOS(key); // 尝试获取文章
+        return res.status(400).json({
             code: 0,
-            msg: '获取文章列表失败',
-            err: '参数错误'
+            msg: '文章已存在',
         });
+    } catch (error) {
+        // 文章不存在，继续创建
     }
 
-    Article.find(query)
-        .sort(manner === 'hot' ? { views: -1 } : { updatedAt: -1 }) // 根据views或updatedAt字段降序排列
-        .then((r) => {
-            res.json({
-                code: 1,
-                msg: '获取文章列表成功',
-                data: r
-            });
-        })
-        .catch((err) => {
-            res.json({
-                code: 1,
-                msg: '获取文章列表失败',
-                err: err
-            });
+    const article = {
+        title,
+        content,
+        author,
+        imgUrl,
+        tags,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+    };
+
+    try {
+        await uploadJsonToCOS(key, article);
+        res.status(201).json({
+            code: 1,
+            msg: '文章创建成功',
+            data: article,
         });
+    } catch (err) {
+        res.status(500).json({
+            code: 0,
+            msg: '文章创建失败',
+            error: err.message,
+        });
+    }
 });
 
 /**
- * /api/articles/users/:uid
- * 根据用户id查询文章列表
+ * 获取所有文章
  */
-router.get('/users/:uid', (req, res) => {
-    const { uid } = req.params
-    console.log(req.params);
-    Article.find({ author: uid })
-        .populate('author', { password: 0 })
-        .populate('coms').then(r => {
-            res.json({
-                code: 1,
-                msg: '获取文章列表成功',
-                data: r
-            })
-        }).catch(err => {
-            res.json({
-                code: 0,
-                msg: '获取文章列表失败',
-                err: err
-            })
-        })
-})
-
-/**
- * /api/articles/users/:aid
- * 根据文章id查询文章详情
- */
-const mongoose = require('mongoose');
-
-router.get('/:aid', (req, res) => {
-    const { aid } = req.params;
-    console.log(aid);
-    // 验证是否是有效的 ObjectId
-    if (!mongoose.Types.ObjectId.isValid(aid)) {
-        return res.json({
-            code: 0,
-            msg: '无效的文章ID',
-            err: '无效的文章ID'
+router.get('/', async (req, res) => {
+    try {
+        // 获取所有文章的文件列表
+        const { data } = await cos.listObjects({
+            Bucket: process.env.Bucket,
+            Region: process.env.Region,
         });
-    }
 
-    // 使用有效的 ObjectId 查询文章详情
-    Article.findByIdAndUpdate(aid,
-        { $inc: { views: 1 } },
-        { new: true }
-    ).then(r => {
-        if (!r) {
-            return res.json({
-                code: 0,
-                msg: '找不到对应的文章'
-            });
+        const articles = [];
+
+        // 获取每篇文章的内容
+        for (const item of data.Contents) {
+            const articleData = await getJsonFromCOS(item.Key);
+            articles.push(articleData);
         }
 
         res.json({
             code: 1,
-            msg: '获取文章详情成功',
-            data: r
+            msg: '获取文章成功',
+            data: articles,
         });
-    }).catch(err => {
-        res.json({
+    } catch (err) {
+        res.status(500).json({
             code: 0,
-            msg: '获取文章详情失败',
-            err: err
+            msg: '获取文章失败',
+            error: err.message,
         });
-    });
+    }
 });
 
 /**
- * /api/articles/users/:aid
- * 根据文章id删除文章
+ * 根据标题获取单篇文章
  */
-router.delete('/:aid', (req, res) => {
-    const { aid } = req.params
-    console.log(req.params);
-    Article.findByIdAndDelete(aid).then(r => {
-        if (r) {
-            res.json({
-                code: 1,
-                msg: '删除文章成功'
-            })
-        } else {
-            res.json({
-                code: 0,
-                msg: '文章已不存在'
-            })
-        }
-    }).catch(err => {
+router.get('/:title', async (req, res) => {
+    const { title } = req.params;
+    const key = `articles/${title}.json`;
+
+    try {
+        const article = await getJsonFromCOS(key);
         res.json({
+            code: 1,
+            msg: '获取文章成功',
+            data: article,
+        });
+    } catch (err) {
+        res.status(404).json({
             code: 0,
-            msg: '操作失败',
-            err: err
-        })
-    })
-})
+            msg: '文章未找到',
+        });
+    }
+});
 
 /**
- * /api/articles/users/:aid
- * 根据文章id编辑文章
+ * 更新文章
  */
-router.patch('/:aid', (req, res) => {
-    const { aid } = req.params
-    console.log('文章id' + req.params + ' ' + '更新的文章内容:' + req.body);
-    Article.findByIdAndUpdate(aid, {
-        ...req.body
-    }, {
-        new: true
-    }).then(r => {
+router.put('/:title', async (req, res) => {
+    const { title } = req.params;
+    const key = `articles/${title}.json`;
+
+    try {
+        const article = await getJsonFromCOS(key);
+        const updates = req.body;
+
+        // 合并更新内容
+        const updatedArticle = { ...article, ...updates, updatedAt: new Date() };
+        await uploadJsonToCOS(key, updatedArticle);
+
         res.json({
             code: 1,
             msg: '文章更新成功',
-            data: r
-        })
-    }).catch(err => {
-        res.json({
+            data: updatedArticle,
+        });
+    } catch (err) {
+        res.status(404).json({
             code: 0,
-            msg: '文章更新失败',
-            err: err
-        })
-    })
-})
+            msg: '文章未找到',
+        });
+    }
+});
 
-module.exports = router
+/**
+ * 删除文章
+ */
+router.delete('/:title', async (req, res) => {
+    const { title } = req.params;
+    const key = `articles/${title}.json`;
+
+    try {
+        await cos.deleteObject({
+            Bucket: process.env.Bucket,
+            Region: process.env.Region,
+            Key: key,
+        });
+
+        res.json({
+            code: 1,
+            msg: '文章删除成功',
+        });
+    } catch (err) {
+        res.status(404).json({
+            code: 0,
+            msg: '文章未找到',
+        });
+    }
+});
+
+module.exports = router;

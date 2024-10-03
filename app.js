@@ -6,7 +6,6 @@ const path = require('path');
 const { User } = require('./models/index');
 const articlesRouter = require('./routes/articles');
 const usersRouter = require('./routes/users');
-const uploadRouter = require('./routes/upload');
 const commentsRouter = require('./routes/comments');
 const cosRouter = require('./routes/cos')
 const morgan = require('morgan');
@@ -58,7 +57,6 @@ app.use(express.static(path.join(__dirname, 'public')));
 // 路由处理程序
 app.use('/api/articles', articlesRouter);
 app.use('/api/users', usersRouter);
-app.use('/api/upload', uploadRouter);
 app.use('/api/comments', commentsRouter);
 app.use('/api/getKeyAndCredentials', cosRouter )
 
